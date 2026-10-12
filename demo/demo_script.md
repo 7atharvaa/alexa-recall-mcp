@@ -41,7 +41,7 @@ know where you stand against your target."
 
 **2:05–2:40 — Under the hood (terminal + code, brief)**
 Show: `curl` to `/mcp` without a token → `401` (note: no WWW-Authenticate
-header — Alexa+ requires exactly that); `python3 -m unittest` → OK, 39
+header — Alexa+ requires exactly that); `python3 -m unittest discover -s tests` → OK, 51
 tests; a timed `tools/call` through the tunnel → under 500 ms.
 Say: "Under the hood: hand-rolled Streamable HTTP on MCP spec 2025-11-25,
 OAuth 2.1 with PKCE account linking, mandatory Origin validation, and a
