@@ -124,7 +124,7 @@ Resources: `program://current` (the training split), `pr://all` (PR table).
 ## Tests
 
 ```bash
-python3 -m unittest tests.test_server   # 31 tests, incl. the OAuth PKCE flow
+python3 -m unittest discover -s tests   # 51 tests, incl. the full OAuth PKCE round-trip
 ```
 
 ## License
