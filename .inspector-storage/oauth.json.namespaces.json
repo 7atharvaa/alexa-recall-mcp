@@ -1,0 +1,12 @@
+{
+  "namespaces": {
+    "5312df02-744c-4350-ab48-e8b6f272eb74": {
+      "memory": {
+        "servers": [
+          "http://127.0.0.1:8765/mcp"
+        ],
+        "idpSessions": []
+      }
+    }
+  }
+}

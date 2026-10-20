@@ -1,0 +1,45 @@
+{
+  "secretsNamespace": "5312df02-744c-4350-ab48-e8b6f272eb74",
+  "servers": {
+    "http://127.0.0.1:8765/mcp": {
+      "discoveryState": {
+        "authorizationServerUrl": "http://127.0.0.1:8765",
+        "resourceMetadata": {
+          "resource": "http://127.0.0.1:8765/mcp",
+          "authorization_servers": [
+            "http://127.0.0.1:8765"
+          ],
+          "scopes_supported": [
+            "fitlog.read",
+            "fitlog.write"
+          ],
+          "bearer_methods_supported": [
+            "header"
+          ]
+        },
+        "authorizationServerMetadata": {
+          "issuer": "http://127.0.0.1:8765",
+          "authorization_endpoint": "http://127.0.0.1:8765/authorize",
+          "token_endpoint": "http://127.0.0.1:8765/token",
+          "scopes_supported": [
+            "fitlog.read",
+            "fitlog.write"
+          ],
+          "response_types_supported": [
+            "code"
+          ],
+          "grant_types_supported": [
+            "authorization_code"
+          ],
+          "token_endpoint_auth_methods_supported": [
+            "none"
+          ],
+          "code_challenge_methods_supported": [
+            "S256"
+          ]
+        }
+      }
+    }
+  },
+  "idpSessions": {}
+}
