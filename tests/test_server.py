@@ -14,14 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mcp import PROTOCOL_VERSION
 from mcp.transport import LoginRateLimiter, MCPHandler, create_server
 
-EXPECTED_TOOLS = {
-    "log_workout",
-    "get_history",
-    "get_personal_records",
-    "plan_workout",
-    "log_protein",
-    "get_nutrition_targets",
-}
+EXPECTED_TOOLS = {"save_household_fact", "recall_fact", "forget_fact"}
 
 
 class FitLogServerTest(unittest.TestCase):
@@ -159,102 +152,50 @@ class FitLogServerTest(unittest.TestCase):
         self.assertEqual({t["name"] for t in tools}, EXPECTED_TOOLS)
         by_name = {t["name"]: t for t in tools}
         # annotation spot checks
-        self.assertFalse(by_name["log_workout"]["annotations"]["destructiveHint"])
-        self.assertFalse(by_name["log_workout"]["annotations"]["readOnlyHint"])
-        self.assertTrue(by_name["get_history"]["annotations"]["readOnlyHint"])
-        self.assertTrue(by_name["get_personal_records"]["annotations"]["readOnlyHint"])
+        self.assertFalse(by_name["save_household_fact"]["annotations"]["readOnlyHint"])
+        self.assertFalse(by_name["save_household_fact"]["annotations"]["destructiveHint"])
+        self.assertTrue(by_name["recall_fact"]["annotations"]["readOnlyHint"])
+        self.assertTrue(by_name["forget_fact"]["annotations"]["destructiveHint"])
         for t in tools:
             self.assertIn("inputSchema", t)
             self.assertIn("annotations", t)
 
-    def test_log_workout_roundtrip(self):
+    def test_fact_roundtrip(self):
+        import re
         sid = self._new_session()
-        res = self._call(
-            sid,
-            "log_workout",
-            {
-                "exercise": "Bench Press",
-                "sets": [{"reps": 8, "weight": 80}, {"reps": 6, "weight": 85}],
-            },
-        )
+        # Save a fact
+        res = self._call(sid, "save_household_fact", {
+            "content": "Daughter's school is Lincoln Elementary",
+            "category": "family",
+            "visibility": "family",
+            "added_by": "mom",
+        })
         self.assertFalse(res["isError"])
-        text = res["content"][0]["text"]
-        self.assertIn("Bench Press", text)
-        self.assertIn("New PR", text)
+        save_text = res["content"][0]["text"]
+        # Extract the fact id from "Saved fact #123: ..."
+        match = re.search(r"#(\d+)", save_text)
+        self.assertIsNotNone(match, f"Could not extract fact id from: {save_text}")
+        fact_id = int(match.group(1))
 
-        hist = self._call(sid, "get_history", {"exercise": "Bench Press"})
-        self.assertIn("Bench Press", hist["content"][0]["text"])
-
-        prs = self._call(sid, "get_personal_records", {})
-        pr_text = prs["content"][0]["text"]
-        self.assertIn("bench press", pr_text.lower())
-        self.assertIn("85", pr_text)
-
-    def test_log_workout_validation(self):
-        sid = self._new_session()
-        res = self._call(sid, "log_workout", {"exercise": "Squat", "sets": []})
-        self.assertTrue(res["isError"])
-        res = self._call(sid, "log_workout", {"sets": [{"reps": 5, "weight": 100}]})
-        self.assertTrue(res["isError"])
-
-    def test_plan_workout(self):
-        sid = self._new_session()
-        res = self._call(sid, "plan_workout", {"day": "monday"})
+        # Recall the fact
+        res = self._call(sid, "recall_fact", {"query": "daughter"})
         self.assertFalse(res["isError"])
-        self.assertIn("Back", res["content"][0]["text"])
-        res = self._call(sid, "plan_workout", {"day": "funday"})
-        self.assertTrue(res["isError"])
-        res = self._call(sid, "plan_workout", {})
-        self.assertFalse(res["isError"])  # defaults to today
+        recall_text = res["content"][0]["text"]
+        self.assertIn("Lincoln Elementary", recall_text)
 
-    def test_protein_flow(self):
-        sid = self._new_session()
-        res = self._call(sid, "log_protein", {"grams": 30})
+        # Forget the fact
+        res = self._call(sid, "forget_fact", {"fact_id": fact_id})
         self.assertFalse(res["isError"])
-        self.assertIn("30 g", res["content"][0]["text"])
-        res = self._call(sid, "get_nutrition_targets", {})
-        text = res["content"][0]["text"]
-        self.assertIn("160-190", text)
-        self.assertIn("30", text)
+        self.assertIn(str(fact_id), res["content"][0]["text"])
+
+        # Confirm it's gone
+        res = self._call(sid, "recall_fact", {"query": "Lincoln"})
+        self.assertIn("No facts", res["content"][0]["text"])
 
     def test_unknown_tool(self):
         sid = self._new_session()
         res = self._call(sid, "nope", {})
         self.assertTrue(res["isError"])
-
-    # -- resources --------------------------------------------------------------
-
-    def test_resources(self):
-        sid = self._new_session()
-        status, _, body = self._post(
-            {"jsonrpc": "2.0", "id": 4, "method": "resources/list"}, session=sid
-        )
-        uris = {r["uri"] for r in json.loads(body)["result"]["resources"]}
-        self.assertEqual(uris, {"program://current", "pr://all"})
-
-        status, _, body = self._post(
-            {
-                "jsonrpc": "2.0",
-                "id": 5,
-                "method": "resources/read",
-                "params": {"uri": "program://current"},
-            },
-            session=sid,
-        )
-        contents = json.loads(body)["result"]["contents"]
-        program = json.loads(contents[0]["text"])
-        self.assertIn("monday", program)
-
-        status, _, body = self._post(
-            {
-                "jsonrpc": "2.0",
-                "id": 6,
-                "method": "resources/read",
-                "params": {"uri": "bogus://x"},
-            },
-            session=sid,
-        )
-        self.assertIn("error", json.loads(body))
 
     # -- transport hardening ------------------------------------------------------
 
@@ -752,9 +693,9 @@ class FitLogServerTest(unittest.TestCase):
         # write tool -> JSON-RPC error about insufficient scope
         status, _, body = self._post(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-             "params": {"name": "log_workout",
-                        "arguments": {"exercise": "Squat",
-                                      "sets": [{"reps": 5, "weight": 100}]}}},
+             "params": {"name": "save_household_fact",
+                        "arguments": {"content": "test", "category": "x",
+                                      "visibility": "private", "added_by": "y"}}},
             session=sid, token=token,
         )
         self.assertEqual(status, 200)
@@ -762,53 +703,29 @@ class FitLogServerTest(unittest.TestCase):
         self.assertIn("error", data)
         self.assertIn("fitlog.write", data["error"]["message"])
         # read tool -> works
-        res = self._call(sid, "get_personal_records", {}, token=token)
+        res = self._call(sid, "recall_fact", {"query": "test"}, token=token)
         self.assertIn("content", res)
 
     def test_write_token_can_write(self):
         token = self._oauth_token_with_scope("fitlog.write")
         sid = self._new_session(token=token)
-        res = self._call(sid, "log_protein", {"grams": 30}, token=token)
+        res = self._call(sid, "save_household_fact", {
+            "content": "test fact",
+            "category": "test",
+            "visibility": "private",
+            "added_by": "writer",
+        }, token=token)
         self.assertFalse(res["isError"])
         # read tool -> blocked
         status, _, body = self._post(
             {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-             "params": {"name": "get_personal_records", "arguments": {}}},
+             "params": {"name": "recall_fact", "arguments": {"query": "test"}}},
             session=sid, token=token,
         )
         data = json.loads(body)
         self.assertIn("error", data)
         self.assertIn("fitlog.read", data["error"]["message"])
 
-    # -- unit preservation --------------------------------------------------
-
-    def test_lb_unit_preserved_in_response(self):
-        sid = self._new_session()
-        res = self._call(sid, "log_workout", {
-            "exercise": "Bench Press",
-            "sets": [{"reps": 5, "weight": 185}],
-            "unit": "lb",
-        })
-        text = res["content"][0]["text"]
-        self.assertFalse(res["isError"])
-        # The user's unit is echoed; the PR is reported in lb, not kg.
-        self.assertIn("185 lb", text)
-        self.assertIn("New PR for Bench Press: 185 lb!", text)
-        self.assertNotIn("84 kg", text)
-        # get_personal_records with unit=lb also reports in lb.
-        prs = self._call(sid, "get_personal_records", {"unit": "lb"})
-        pr_text = prs["content"][0]["text"]
-        self.assertIn("185 lb", pr_text)
-        self.assertNotIn("kg", pr_text)
-
-    def test_kg_default_unchanged(self):
-        sid = self._new_session()
-        res = self._call(sid, "log_workout", {
-            "exercise": "Overhead Press",
-            "sets": [{"reps": 5, "weight": 60}],
-        })
-        text = res["content"][0]["text"]
-        self.assertIn("60 kg", text)
 
 
 class OwnerGateTest(unittest.TestCase):

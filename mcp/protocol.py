@@ -106,8 +106,7 @@ def handle_rpc(msg: dict, ctx, scopes: set[str] | None = None) -> dict | None:
 
     `scopes` is the granted scope set of the bearer token that authorized
     this request (None = unauthenticated; the transport rejects those
-    before we get here). tools/call and resources/read are checked
-    against TOOL_SCOPES / RESOURCE_SCOPES.
+    before we get here). tools/call is checked against TOOL_SCOPES.
     """
     if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0":
         return _err(None, INVALID_REQUEST, "Invalid JSON-RPC 2.0 message.")
@@ -159,31 +158,14 @@ def handle_rpc(msg: dict, ctx, scopes: set[str] | None = None) -> dict | None:
         )
 
     if method == "resources/list":
-        return _ok(msg_id, {"resources": tool_defs.RESOURCE_DEFINITIONS})
+        # No static resources are defined for the household-memory model.
+        return _ok(msg_id, {"resources": []})
 
     if method == "resources/read":
         uri = params.get("uri")
         if not isinstance(uri, str):
             return _err(msg_id, INVALID_PARAMS, "Missing 'uri' for resources/read.")
-        required = tool_defs.RESOURCE_SCOPES.get(uri)
-        if required is None:
-            return _err(msg_id, INVALID_PARAMS, f"Unknown resource: {uri}")
-        if scopes is None or required not in scopes:
-            return _err(
-                msg_id, INVALID_PARAMS,
-                f"Insufficient scope: '{uri}' requires '{required}'.",
-            )
-        text, is_error = tool_defs.read_resource(ctx.store, uri)
-        if is_error:
-            return _err(msg_id, INVALID_PARAMS, text)
-        return _ok(
-            msg_id,
-            {
-                "contents": [
-                    {"uri": uri, "mimeType": "application/json", "text": text}
-                ]
-            },
-        )
+        return _err(msg_id, INVALID_PARAMS, f"Unknown resource: {uri}")
 
     if is_notification:
         # Unknown notifications are ignored per JSON-RPC.

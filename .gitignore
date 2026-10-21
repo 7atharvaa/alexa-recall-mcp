@@ -1,2 +1,4 @@
 .inspector-storage/
 .inspector-catalog.json
+__pycache__/
+*.pyc
