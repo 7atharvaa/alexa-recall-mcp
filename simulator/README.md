@@ -1,30 +1,31 @@
-# FitLog Alexa+ web simulator
+# Household Memory Bridge — web simulator
 
-A web page that simulates the Alexa+ experience against the **real**
-self-hosted FitLog MCP server — the route the hackathon rules explicitly
-allow ("simulate an Alexa+ experience using your preferred agentic tools
-via a web app").
+A web page that simulates the household assistant experience against the
+**real** self-hosted FitLog MCP server — the route the hackathon rules
+explicitly allow ("simulate an Alexa+ experience using your preferred
+agentic tools via a web app").
 
 What it does:
 
-- Echo-style UI: glowing ring, conversation transcript, typed "voice" input.
-- **Account linking** runs the server's genuine OAuth 2.1 + PKCE flow:
-  browser → `/authorize` → owner-password sign-in → Approve →
-  authorization code → `/token` → bearer token.
-- Every chat turn is routed by a small keyword/regex NLU to one of the 6
-  FitLog tools and executed as a real MCP `tools/call` (Streamable HTTP,
-  bearer token, session id). The inspector panel shows the live JSON-RPC
-  request/response — proof of a working MCP integration on camera.
+- **Chat UI** with a Mom / Dad speaker switch, conversation transcript and
+  one-click example prompts.
+- Every chat turn is routed by a small regex NLU to one of the 3 FitLog
+  tools and executed as a real MCP `tools/call` (Streamable HTTP, bearer
+  token, session id).
+- The right-hand **raw traffic inspector** shows the exact JSON-RPC frames
+  that went over the wire — `initialize` → `notifications/initialized` →
+  `tools/list` → `tools/call` — with request/response headers, status codes
+  and timings. Proof of a working MCP integration, on camera.
 
 ## Run it
 
 Requires Python 3.9+, no `pip install`. Two terminals.
 
-**Terminal 1 — the MCP server** (fresh DB so PRs trigger on camera):
+**Terminal 1 — the MCP server** (fresh DB so the demo starts clean):
 
 ```bash
 cd ~/workspace/fitlog-mcp   # or wherever you cloned the repo
-FITLOG_OWNER_PASSWORD='pick-a-strong-password' \
+FITLOG_API_TOKEN='devtoken' \
 FITLOG_DB=/tmp/fitlog-demo.db \
 python3 server.py
 # -> fitlog-mcp listening on http://127.0.0.1:8765/mcp
@@ -35,41 +36,62 @@ python3 server.py
 ```bash
 cd ~/workspace/fitlog-mcp/simulator
 ./start.sh
-# -> FitLog Alexa+ simulator on http://127.0.0.1:8799/
+# -> Household Memory Bridge simulator on http://127.0.0.1:8080/
 ```
 
-Then open http://127.0.0.1:8799/ in a browser.
+Then open http://127.0.0.1:8080/ in a browser.
 
 Environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `FITLOG_MCP_URL` | `http://127.0.0.1:8765` | FitLog MCP server base URL (no trailing `/mcp`) |
+| `FITLOG_TOKEN` / `FITLOG_API_TOKEN` | `devtoken` | bearer token sent to the MCP server |
 | `SIMULATOR_HOST` | `127.0.0.1` | interface the simulator listens on |
-| `SIMULATOR_PORT` | `8799` | simulator port |
+| `SIMULATOR_PORT` | `8080` | simulator port |
 
-The owner password is **never hardcoded** — the MCP server reads
-`FITLOG_OWNER_PASSWORD` from its own environment, and the simulator just
-drives the server's real `/authorize` page.
+The simulator never holds the owner password — it only uses the same static
+bearer token any other MCP client would use.
 
 ## Demo click path (for the video)
 
-1. Browser: http://127.0.0.1:8799/
-2. Click **Link FitLog account** → the real `/authorize` page appears →
-   enter the owner password → **Approve** → redirected back, pill flips to
-   **Linked ✓**.
+1. Browser: http://127.0.0.1:8080/
+2. The header shows **MCP connected — 3 tools** once the simulator has
+   completed a real `initialize` + `tools/list` handshake.
 3. Click a suggestion chip or type:
-   - “Log my bench press: 3 sets of 5 at 185 pounds” → sets logged,
-     pounds auto-converted, “New PR” callout.
-   - “What's my bench press personal record?” → heaviest set + est. 1RM.
-   - “What's today's workout plan?” → today's split.
-   - “Log 45 grams of protein” → total vs 160–190 g target.
-   - “Show my workout history” / “What are my nutrition targets?”
-4. Expand the 🔍 inspector to show the raw `tools/call` JSON-RPC on screen.
+   - “Remember that Emma is allergic to peanuts” → `save_household_fact`.
+   - “What do you remember about allergies?” → `recall_fact`.
+   - “What allergies does Mom have?” → `recall_fact` (any question is a
+     recall; the query word is stemmed, so *allergies* finds *allergic*).
+   - “Delete fact 1” → `forget_fact`.
+   - “Hi” → answered locally, no MCP call.
+4. The traffic panel on the right shows every JSON-RPC frame with headers.
+
+Routing is a small regex NLU, in priority order: delete → imperative save
+(“Remember that…”) → small talk → recall question → save phrasing → default
+save. Anything that starts with an interrogative word (*what, who, when,
+where, which, how*) is treated as a recall.
+
+If the MCP server is unreachable or the bearer token is rejected, the UI shows
+the real reason (transport error, or the server's `invalid_token` body)
+instead of a generic failure, and the traffic panel still shows the frames
+that did go out.
+
+## HTTP API
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/` | GET | the simulator UI |
+| `/api/status` | GET | upstream health + the live tool catalogue |
+| `/api/health` | GET | liveness probe |
+| `/api/chat` | POST | `{message, user_id, history}` → `{ok, reply, tool, arguments, frames}` |
+
+`frames` is the full recorded JSON-RPC traffic for the turn.
 
 ## Files
 
-- `server.py` — stdlib-only backend: static UI, OAuth callback + token
-  exchange, NLU router, MCP client (initialize → tools/call).
-- `index.html` — the Echo-style UI (vanilla HTML/CSS/JS, no build step).
+- `server.py` — stdlib-only backend: static UI, MCP client
+  (initialize → notifications/initialized → tools/list → tools/call),
+  regex NLU router, frame recorder.
+- `index.html` — the chat UI (vanilla HTML/CSS/JS, no build step).
 - `start.sh` — one-command launcher.
