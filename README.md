@@ -1,4 +1,4 @@
-# Alexa+ Memory Bridge
+# Alexa Recall
 
 This is my submission for the Alexa+ track of the Amazon "Build, Ship, Shape" Developer Hackathon. 
 

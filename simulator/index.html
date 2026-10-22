@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Household Memory Bridge &mdash; Simulator</title>
+<title>Alexa+ &mdash; Simulator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
@@ -280,7 +280,7 @@
 <body>
 <header>
   <div class="brand">
-    Household Memory Bridge
+    Alexa+
     <small>Simulator &mdash; live MCP JSON-RPC traffic</small>
   </div>
   <div class="who" id="who"></div>
@@ -302,7 +302,7 @@
     <div class="panel-head">Conversation<span class="tag" id="active-tag">User 1</span></div>
     <div id="messages"></div>
     <div id="composer">
-      <input id="input" placeholder="Ask the household memory to remember or recall something..." autocomplete="off">
+      <input id="input" placeholder="How can I help you today?" autocomplete="off">
       <button id="send">Send</button>
     </div>
   </section>
@@ -762,8 +762,7 @@
   renderUsers();
   renderChat();
   addMessage("bot",
-    "Hi! I'm the Household Memory Bridge. Tell me something to remember, "
-    + "or ask me what the family already knows.");
+    "Hi! I'm the Alexa+. Ask me what you want to know.");
   refreshStatus();
   setInterval(refreshStatus, 15000);
 })();
