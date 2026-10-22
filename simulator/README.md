@@ -7,8 +7,11 @@ agentic tools via a web app").
 
 What it does:
 
-- **Chat UI** with a Mom / Dad speaker switch, conversation transcript and
-  one-click example prompts.
+- **Chat UI** with a family-member switcher, conversation transcript and a
+  dark, minimal look. The roster starts with a single default user
+  (*User 1*, `user_id: user1`); you can add more members with the
+  **Add family member** field and rename the active one by clicking its
+  name.
 - Every chat turn is routed by a small regex NLU to one of the 3 FitLog
   tools and executed as a real MCP `tools/call` (Streamable HTTP, bearer
   token, session id).
@@ -58,7 +61,7 @@ bearer token any other MCP client would use.
 1. Browser: http://127.0.0.1:8080/
 2. The header shows **MCP connected — 3 tools** once the simulator has
    completed a real `initialize` + `tools/list` handshake.
-3. Click a suggestion chip or type:
+3. Type a message (there are no hint buttons — just type):
    - “Remember that Emma is allergic to peanuts” → `save_household_fact`.
    - “What do you remember about allergies?” → `recall_fact`.
    - “What allergies does Mom have?” → `recall_fact` (any question is a
@@ -66,6 +69,10 @@ bearer token any other MCP client would use.
    - “Delete fact 1” → `forget_fact`.
    - “Hi” → answered locally, no MCP call.
 4. The traffic panel on the right shows every JSON-RPC frame with headers.
+5. To demo several speakers: type a name into **Add family member** and
+   press the `+` button, then switch between the pills. Each member keeps
+   their own conversation history, and facts they save are attributed to
+   their display name. Click the **active** member's name to rename it.
 
 Routing is a small regex NLU, in priority order: delete → imperative save
 (“Remember that…”) → small talk → recall question → save phrasing → default
@@ -84,9 +91,11 @@ that did go out.
 | `/` | GET | the simulator UI |
 | `/api/status` | GET | upstream health + the live tool catalogue |
 | `/api/health` | GET | liveness probe |
-| `/api/chat` | POST | `{message, user_id, history}` → `{ok, reply, tool, arguments, frames}` |
+| `/api/chat` | POST | `{message, user_id, user_name, history}` → `{ok, reply, tool, arguments, frames}` |
 
-`frames` is the full recorded JSON-RPC traffic for the turn.
+`user_id` is any stable id string (the UI generates one per family member);
+`user_name` is the display name the fact should be attributed to and is
+optional. `frames` is the full recorded JSON-RPC traffic for the turn.
 
 ## Files
 

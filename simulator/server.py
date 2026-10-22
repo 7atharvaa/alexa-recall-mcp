@@ -201,11 +201,52 @@ class McpClient:
 
 # ==================================================================== router
 
-# Who is speaking. Mom and Dad each get their own identity in the store.
-USERS = {
-    "mom": {"name": "Mom", "visibility": "family"},
-    "dad": {"name": "Dad", "visibility": "family"},
-}
+# Who is speaking. The UI owns the roster: it starts with one default user
+# and can add or rename family members at runtime, sending any user_id
+# string plus the display name it is currently showing.
+DEFAULT_USER_ID = "user1"
+DEFAULT_USER_NAME = "User 1"
+
+
+def _slugify(value) -> str:
+    """Turn an arbitrary label into a safe, stable id token."""
+    s = str(value or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s[:64]
+
+
+def _display_name(uid: str) -> str:
+    """'user1' -> 'User 1', 'emma' -> 'Emma', 'emma-2' -> 'Emma 2'."""
+    parts = []
+    for chunk in uid.split("-"):
+        if not chunk:
+            continue
+        m = re.match(r"^([a-z]+)(\d*)$", chunk)
+        if m:
+            word, num = m.group(1), m.group(2)
+            parts.append(word[:1].upper() + word[1:])
+            if num:
+                parts.append(num)
+        else:
+            parts.append(chunk[:1].upper() + chunk[1:])
+    if not parts:
+        return DEFAULT_USER_NAME
+    return " ".join(parts)
+
+
+def resolve_user(user_id, user_name=None) -> dict:
+    """Resolve the speaker of a turn into {id, name, visibility}.
+
+    Any user_id string is accepted -- the roster lives in the browser, so
+    the server only needs a safe id and a human-readable name to attribute
+    saved facts to.
+    """
+    uid = _slugify(user_id) or DEFAULT_USER_ID
+    name = str(user_name or "").strip()
+    if not name:
+        name = _display_name(uid)
+    return {"id": uid, "name": name[:60], "visibility": "family"}
+
 
 # Canned answers for the small talk the simulator handles locally.
 _SMALLTALK = [
@@ -394,11 +435,11 @@ _SAVE_ANY = re.compile(
     r"fact that)\b", re.I)
 
 
-def route(text: str, user_id: str) -> dict:
+def route(text: str, user_id: str, user_name: str | None = None) -> dict:
     """Map a chat message to a plan: {tool, arguments, reply}.
 
     'tool' is None for locally answered small talk."""
-    user = USERS.get(user_id, USERS["mom"])
+    user = resolve_user(user_id, user_name)
     low = text.lower()
 
     def save_plan():
@@ -528,11 +569,15 @@ def _rpc_error(response) -> str:
 
 # ==================================================================== chat
 
-def handle_chat(message: str, user_id: str, history: list) -> dict:
+def handle_chat(message: str, user_id: str, history: list,
+                user_name: str | None = None) -> dict:
     """Run one chat turn end to end and return the UI payload."""
     message = (message or "").strip()
     if not message:
         return {"ok": False, "error": "empty message", "frames": []}
+
+    user = resolve_user(user_id, user_name)
+    user_id = user["id"]
 
     client = McpClient(_mcp_endpoint(), FITLOG_TOKEN)
     frames = []
@@ -577,7 +622,7 @@ def handle_chat(message: str, user_id: str, history: list) -> dict:
         }
 
     # 3. decide what to call
-    plan = route(message, user_id)
+    plan = route(message, user_id, user_name)
     tool = plan["tool"]
     arguments = plan["arguments"]
     reply = plan["reply"]
@@ -747,12 +792,13 @@ class SimulatorHandler(BaseHTTPRequestHandler):
             return self._send_json(400, {"ok": False,
                                          "error": "invalid JSON body"})
         message = str(data.get("message") or "")
-        user_id = str(data.get("user_id") or "mom").lower()
+        user_id = str(data.get("user_id") or DEFAULT_USER_ID)
+        user_name = str(data.get("user_name") or "").strip() or None
         history = data.get("history") or []
         if not isinstance(history, list):
             history = []
         try:
-            result = handle_chat(message, user_id, history)
+            result = handle_chat(message, user_id, history, user_name)
         except Exception as exc:
             return self._send_json(500, {
                 "ok": False,
